@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ai-agent-permission-probe · AI Agent 权限边界探测</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%232f9e8f' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%232f9e8f'/%3E%3Cpath d='M16 3v6M16 23v6M3 16h6M23 16h6' stroke='%23e0a458' stroke-width='2'/%3E%3C/svg%3E">
+<link href="https://miaoda.feishu.cn/fonts/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1626; --bg-soft:#151e31; --line:#25304a; --line-soft:#1c2540;
+    --ink:#e8ecf4; --ink-dim:#9aa7c0; --ink-faint:#6b7a97;
+    --teal:#2f9e8f; --teal-bright:#5cc4b5; --amber:#e0a458; --red:#d96a5f;
+    --yellow:#d9b45f; --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --sans:"Noto Sans SC",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 28px}
+  a{color:var(--teal-bright);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* topbar */
+  .topbar{position:sticky;top:0;z-index:20;background:rgba(15,22,38,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line-soft)}
+  .topbar .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+  .brand{font-family:var(--mono);font-size:13px;color:var(--ink-dim);letter-spacing:.02em}
+  .brand b{color:var(--teal-bright);font-weight:600}
+  .lang-switch{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .lang-switch button{font-family:var(--mono);font-size:12px;padding:6px 14px;background:transparent;border:0;color:var(--ink-dim);cursor:pointer;transition:background .15s,color .15s}
+  .lang-switch button.active{background:var(--teal);color:#0b121d;font-weight:600}
+  .lang-switch button:focus-visible{outline:2px solid var(--teal-bright);outline-offset:-2px}
+
+  /* hero */
+  .hero{padding:72px 0 48px;border-bottom:1px solid var(--line-soft)}
+  .badges{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+  .badge{font-family:var(--mono);font-size:11px;letter-spacing:.12em;color:var(--teal-bright);border:1px solid var(--line);border-radius:3px;padding:4px 10px}
+  h1{font-size:44px;font-weight:700;letter-spacing:-.01em;line-height:1.15;font-family:var(--mono)}
+  h1 .dot{color:var(--amber)}
+  .tagline{margin-top:14px;font-size:20px;font-weight:500;color:var(--ink)}
+  .lead{margin-top:10px;font-size:15px;color:var(--ink-dim);max-width:66ch}
+  .hero-grid{margin-top:36px;display:grid;grid-template-columns:minmax(0,380px) 1fr;gap:40px;align-items:center}
+
+  /* ring */
+  .ring-box{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .ring-box svg{width:100%;max-width:280px;height:auto}
+  .ring-caption{font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:.08em}
+  .ring-seg{fill:none;stroke-width:14}
+  .ring-label{font-size:11px;fill:var(--ink-dim)}
+  .ring-center{font-family:var(--mono);font-size:12px;fill:var(--ink);text-anchor:middle}
+
+  /* risk bar */
+  .risk-panel{border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);padding:22px 22px 8px}
+  .risk-title{font-size:13px;font-weight:500;color:var(--ink);margin-bottom:14px}
+  .risk-row{display:flex;gap:14px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line-soft)}
+  .risk-row:first-of-type{border-top:0}
+  .risk-dot{flex:0 0 auto;width:10px;height:10px;border-radius:50%;align-self:center}
+  .risk-name{flex:0 0 auto;width:64px;font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .risk-desc{font-size:14px;color:var(--ink-dim)}
+  .risk-bar{flex:1 1 auto;height:4px;border-radius:2px;background:var(--line-soft);margin:0 6px;align-self:center}
+  .risk-bar i{display:block;height:100%;border-radius:2px}
+  .risk-bar i.high{width:100%;background:var(--red)}
+  .risk-bar i.medium{width:62%;background:var(--yellow)}
+  .risk-bar i.low{width:28%;background:var(--teal)}
+  .risk-bar i.info{width:10%;background:var(--ink-faint)}
+
+  /* sections */
+  section{padding:52px 0;border-bottom:1px solid var(--line-soft)}
+  .kicker{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:.14em;margin-bottom:8px}
+  h2{font-size:26px;font-weight:700;margin-bottom:26px;letter-spacing:-.01em}
+  h3{font-size:16px;font-weight:600;margin-bottom:8px}
+
+  .feat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+  .feat{border:1px solid var(--line);border-radius:8px;padding:18px;background:var(--bg-soft)}
+  .feat h3{font-size:15px}
+  .feat p{font-size:14px;color:var(--ink-dim);margin-top:6px}
+  .feat .tick{display:inline-block;width:8px;height:8px;background:var(--teal);border-radius:2px;margin-right:8px;vertical-align:1px}
+
+  table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14px}
+  colgroup col:nth-child(1){width:5%}
+  colgroup col:nth-child(2){width:22%}
+  colgroup col:nth-child(3){width:48%}
+  colgroup col:nth-child(4){width:25%}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-soft);vertical-align:top}
+  th{font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:.06em;font-weight:600}
+  td{color:var(--ink-dim)}
+  td b{color:var(--ink);font-weight:500}
+  .surf-num{font-family:var(--mono);color:var(--amber);font-size:12px}
+
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;counter-reset:step}
+  .step{position:relative;border:1px solid var(--line);border-radius:8px;padding:20px 18px 16px;background:var(--bg-soft)}
+  .step::before{counter-increment:step;content:counter(step,decimal-leading-zero);position:absolute;top:14px;right:16px;font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+  .step h3{font-size:14px;padding-right:42px}
+  .step p{font-size:12.5px;color:var(--ink-faint);margin:4px 0 12px}
+  pre{font-family:var(--mono);font-size:12px;line-height:1.6;background:#0b1120;border:1px solid var(--line-soft);border-radius:6px;padding:12px 14px;overflow-x:auto;color:#c8d3e8;white-space:pre-wrap;word-break:break-all}
+  .step pre{margin:0}
+  .copy-wrap{display:flex;justify-content:flex-end;margin-top:8px}
+  .copy-btn{font-family:var(--mono);font-size:11px;color:var(--ink-faint);background:transparent;border:1px solid var(--line);border-radius:4px;padding:4px 10px;cursor:pointer;transition:color .15s,border-color .15s}
+  .copy-btn:hover{color:var(--teal-bright);border-color:var(--teal)}
+  .copy-btn:focus-visible{outline:2px solid var(--teal-bright);outline-offset:-2px}
+
+  /* output */
+  .out-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .out-card{border:1px solid var(--line);border-radius:8px;padding:18px;background:var(--bg-soft)}
+  .out-card .file{font-family:var(--mono);font-size:13px;color:var(--teal-bright)}
+  .out-card ul{margin-top:10px;list-style:none}
+  .out-card li{font-size:13px;color:var(--ink-dim);padding:5px 0;border-top:1px dashed var(--line-soft)}
+  .out-card li:first-child{border-top:0}
+  .out-card li code{font-family:var(--mono);font-size:12px;color:var(--ink)}
+  .note{margin-top:14px;font-size:13px;color:var(--ink-dim);border-left:3px solid var(--amber);padding:6px 14px;background:rgba(224,164,88,.06)}
+
+  /* compliance & refs */
+  .comp-list{list-style:none}
+  .comp-list li{font-size:14px;color:var(--ink-dim);padding:8px 0;border-top:1px solid var(--line-soft)}
+  .comp-list li:first-child{border-top:0}
+  .comp-list b{color:var(--ink);font-weight:500}
+  .refs{display:flex;flex-wrap:wrap;gap:8px}
+  .ref{font-family:var(--mono);font-size:12px;border:1px solid var(--line);border-radius:4px;padding:6px 12px;color:var(--ink-dim)}
+
+  footer{padding:36px 0 48px;color:var(--ink-faint);font-size:13px;display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+  footer .mono{font-family:var(--mono)}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(20px);background:#0b1120;border:1px solid var(--teal);color:var(--teal-bright);font-family:var(--mono);font-size:12px;padding:9px 16px;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media (max-width:760px){
+    .hero{padding:48px 0 36px}
+    h1{font-size:32px}
+    .tagline{font-size:17px}
+    .hero-grid{grid-template-columns:1fr;gap:28px}
+    .feat-grid,.steps,.out-grid{grid-template-columns:1fr}
+    .steps{grid-template-columns:1fr}
+    .wrap{padding:0 20px}
+    table{font-size:13px}
+    th,td{padding:8px 8px}
+    .lang-switch button{min-height:44px;padding:6px 16px}
+    .copy-btn{min-height:44px;padding:6px 14px}
+    .ref{min-height:44px;display:inline-flex;align-items:center}
+  }
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto}
+    *{transition:none!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><b>probe</b>_permissions</div>
+    <div class="lang-switch" role="group" aria-label="language">
+      <button id="btn-zh" class="active" data-lang="zh">中文</button>
+      <button id="btn-en" data-lang="en">EN</button>
+    </div>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="badges">
+      <span class="badge" data-i18n="badge1">READ-ONLY AUDIT</span>
+      <span class="badge" data-i18n="badge2">AI AGENT SECURITY</span>
+      <span class="badge" data-i18n="badge3">ZERO DEPENDENCY</span>
+    </div>
+    <h1>ai-agent-permission-probe<span class="dot">/</span></h1>
+    <p class="tagline" data-i18n="tagline">AI Agent 权限边界探测（只读审计）</p>
+    <p class="lead" data-i18n="lead">探测 AI Agent 在当前电脑上实际拥有的权限，输出带证据的权限矩阵与加固建议。信息安全开源持续贡献项目的一个迭代，聚焦 AI Agent 安全方向。</p>
+
+    <div class="hero-grid">
+      <div class="ring-box">
+        <svg viewBox="0 0 260 260" role="img" aria-label="8 permission surfaces">
+          <circle cx="130" cy="130" r="80" fill="none" stroke="#1c2540" stroke-width="14"/>
+          <g class="ring-seg" stroke="#2f9e8f">
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="401.8" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="352.3" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="302.8" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="253.3" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="203.8" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="154.3" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="104.8" transform="rotate(-90 130 130)"/>
+            <circle cx="130" cy="130" r="80" stroke-dasharray="49.5 377.8" stroke-dashoffset="55.3" transform="rotate(-90 130 130)"/>
+          </g>
+          <text class="ring-center" x="130" y="126" data-i18n="ringSurfaces">8 权限面</text>
+          <text class="ring-center" x="130" y="144" style="font-size:10px;fill:#6b7a97" data-i18n="ringSub">8 PERMISSION SURFACES</text>
+          <g class="ring-label" font-family="JetBrains Mono,monospace">
+            <text x="130" y="22" text-anchor="middle" data-i18n="s1">身份</text>
+            <text x="196" y="50" text-anchor="start" data-i18n="s2">文件</text>
+            <text x="228" y="134" text-anchor="start" data-i18n="s3">Shell</text>
+            <text x="196" y="218" text-anchor="start" data-i18n="s4">网络</text>
+            <text x="130" y="246" text-anchor="middle" data-i18n="s5">凭据</text>
+            <text x="64" y="218" text-anchor="end" data-i18n="s6">系统</text>
+            <text x="32" y="134" text-anchor="end" data-i18n="s7">GUI</text>
+            <text x="64" y="50" text-anchor="end" data-i18n="s8">基线</text>
+          </g>
+        </svg>
+        <span class="ring-caption" data-i18n="ringCaption">8 SURFACES · 68 CHECKS · READ-ONLY</span>
+      </div>
+
+      <div class="risk-panel">
+        <p class="risk-title" data-i18n="riskTitle">风险分级标准</p>
+        <div class="risk-row">
+          <span class="risk-dot" style="background:var(--red)"></span>
+          <span class="risk-name">high</span>
+          <span class="risk-bar"><i class="high"></i></span>
+          <span class="risk-desc" data-i18n="riskHigh">可写系统目录 · 免密 sudo · PATH 注入</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-dot" style="background:var(--yellow)"></span>
+          <span class="risk-name">medium</span>
+          <span class="risk-bar"><i class="medium"></i></span>
+          <span class="risk-desc" data-i18n="riskMedium">敏感目录可达 · 凭据存在 · 监听端口</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-dot" style="background:var(--teal)"></span>
+          <span class="risk-name">low</span>
+          <span class="risk-bar"><i class="low"></i></span>
+          <span class="risk-desc" data-i18n="riskLow">sticky 临时目录 · 干净的 PATH</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-dot" style="background:var(--ink-faint)"></span>
+          <span class="risk-name">info</span>
+          <span class="risk-bar"><i class="info"></i></span>
+          <span class="risk-desc" data-i18n="riskInfo">身份与版本等上下文信息</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="features">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k1">FEATURES</p>
+    <h2 data-i18n="h1">功能特性</h2>
+    <div class="feat-grid">
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f1t">只读探测</span></h3><p data-i18n="f1d">不修改系统状态、不提权、不发送网络载荷，写入仅限报告目录与一枚即建即删的临时文件。</p></div>
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f2t">8 大权限面</span></h3><p data-i18n="f2d">身份与提权、文件系统、shell 与工具、网络、凭据、系统信息、GUI/浏览器、安全基线。</p></div>
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f3t">三格式报告</span></h3><p data-i18n="f3d">JSON 结构化（程序消费）+ Markdown 权限矩阵（人读）+ HTML 可视化报告（中英切换、可筛选搜索）。</p></div>
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f4t">真实可写性验证</span></h3><p data-i18n="f4d">临时文件实测而非仅看权限位，规避 TCC / ACL 下的误判。</p></div>
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f5t">风险分级与加固建议</span></h3><p data-i18n="f5d">每条发现带 high / medium / low / info 评级与对应处置建议。</p></div>
+      <div class="feat"><h3><span class="tick"></span><span data-i18n="f6t">零第三方依赖</span></h3><p data-i18n="f6d">仅用 Python 标准库，Python 3.9+ 即可运行。</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="surfaces">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k2">PERMISSION SURFACES</p>
+    <h2 data-i18n="h2">探测维度（8 大权限面，共 68 项检查）</h2>
+    <table>
+      <colgroup><col style="width:6%"><col style="width:22%"><col style="width:46%"><col style="width:26%"></colgroup>
+      <thead><tr><th>#</th><th data-i18n="tSurf">权限面</th><th data-i18n="tScope">检查内容</th><th data-i18n="tNote">说明</th></tr></thead>
+      <tbody>
+        <tr><td class="surf-num">01</td><td><b data-i18n="s1">身份</b></td><td data-i18n="d1">当前用户、uid/gid、所属组、HOME/shell、sudo 状态、umask</td><td data-i18n="n1">sudo 仅以 -n -l 查询，绝不弹窗</td></tr>
+        <tr><td class="surf-num">02</td><td><b data-i18n="s2">文件</b></td><td data-i18n="d2">用户/系统/敏感/项目目录的读-写-执行权限，其他用户家目录，真实可写性验证</td><td data-i18n="n2">识别 sticky 位（如 /tmp）避免误报</td></tr>
+        <tr><td class="surf-num">03</td><td><b data-i18n="s3">Shell</b></td><td data-i18n="d3">shell 执行能力、可用工具清单、PATH 卫生、homebrew</td><td data-i18n="n3">PATH 用户可写/当前目录为高危</td></tr>
+        <tr><td class="surf-num">04</td><td><b data-i18n="s4">网络</b></td><td data-i18n="d4">代理环境变量、DNS、出站 TCP、本地监听端口、默认路由</td><td data-i18n="n4">仅为 TCP 连接尝试，不发送载荷</td></tr>
+        <tr><td class="surf-num">05</td><td><b data-i18n="s5">凭据</b></td><td data-i18n="d5">敏感环境变量存在性、凭据文件存在性</td><td data-i18n="n5">只报存在与否，绝不读取内容</td></tr>
+        <tr><td class="surf-num">06</td><td><b data-i18n="s6">系统</b></td><td data-i18n="d6">平台、macOS 版本、CPU/内存、运行时长、磁盘、已装应用、进程可见性</td><td data-i18n="n6">用于评估资源与影响面</td></tr>
+        <tr><td class="surf-num">07</td><td><b data-i18n="s7">GUI</b></td><td data-i18n="d7">剪贴板可读性、浏览器配置文件存在性（Chrome/Safari/Firefox）</td><td data-i18n="n7">浏览器配置可能含会话/凭据</td></tr>
+        <tr><td class="surf-num">08</td><td><b data-i18n="s8">基线</b></td><td data-i18n="d8">SIP、Gatekeeper、FileVault 状态</td><td data-i18n="n8">关闭状态会显著扩大影响面</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="quickstart">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k3">QUICK START</p>
+    <h2 data-i18n="h3">快速开始</h2>
+    <div class="steps">
+      <div class="step">
+        <h3 data-i18n="q1t">进入项目</h3>
+        <p data-i18n="q1d">clone 或进入项目目录</p>
+        <pre>cd ai-agent-permission-probe</pre>
+        <div class="copy-wrap"><button class="copy-btn" data-copy="cd ai-agent-permission-probe" data-i18n="copy">复制</button></div>
+      </div>
+      <div class="step">
+        <h3 data-i18n="q2t">直接运行</h3>
+        <p data-i18n="q2d">无需安装任何依赖</p>
+        <pre>python3 scripts/probe_permissions.py --output-dir ./probe-report</pre>
+        <div class="copy-wrap"><button class="copy-btn" data-copy="python3 scripts/probe_permissions.py --output-dir ./probe-report" data-i18n="copy">复制</button></div>
+      </div>
+      <div class="step">
+        <h3 data-i18n="q3t">查看报告</h3>
+        <p data-i18n="q3d">打开权限矩阵报告</p>
+        <pre>open probe-report/probe_report.md</pre>
+        <div class="copy-wrap"><button class="copy-btn" data-copy="open probe-report/probe_report.md" data-i18n="copy">复制</button></div>
+      </div>
+    </div>
+    <p class="note" data-i18n="qsNote">常用参数：--output-dir 指定输出目录 · --json/--md/--html 选择格式 · --no-network 跳过网络检查（隔离网络使用）。</p>
+  </div>
+</section>
+
+<section id="output">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k4">OUTPUT</p>
+    <h2 data-i18n="h4">输出说明</h2>
+    <div class="out-grid">
+      <div class="out-card">
+        <p class="file">probe_report.json</p>
+        <ul>
+          <li><code>meta</code> <span data-i18n="o1">环境与时间戳</span></li>
+          <li><code>risk_summary</code> <span data-i18n="o2">风险计数</span></li>
+          <li><code>checks[]</code> <span data-i18n="o3">68 项检查，含状态/证据/风险/建议</span></li>
+          <li><code>recommendations[]</code> <span data-i18n="o4">加固建议清单</span></li>
+          <li><code>fixes[]</code> <span data-i18n="o9">8 条可选修复项</span></li>
+        </ul>
+      </div>
+      <div class="out-card">
+        <p class="file">probe_report.md</p>
+        <ul>
+          <li data-i18n="o5">风险摘要表</li>
+          <li data-i18n="o6">权限矩阵表（68 行）</li>
+          <li data-i18n="o7">高/中风险发现与证据</li>
+          <li data-i18n="o8">加固建议</li>
+        </ul>
+      </div>
+    </div>
+    <p class="note" data-i18n="outNote">每次运行产出一份全新报告（含 UTC 时间戳），可按日期归档，便于整改前后对比与审计留痕。报告含本机主机名等本地信息，请勿提交公开仓库。</p>
+  </div>
+</section>
+
+<section id="compliance">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k5">COMPLIANCE</p>
+    <h2 data-i18n="h5">合规与定位</h2>
+    <ul class="comp-list">
+      <li><b data-i18n="c1">防御性安全。</b> <span data-i18n="c1d">仅做审计、检测、评估方向，无任何攻击、爆破、漏洞利用内容。</span></li>
+      <li><b data-i18n="c2">只读审计。</b> <span data-i18n="c2d">不读秘密内容、不提权、不修改系统；输出仅用于权限评估与加固。</span></li>
+      <li><b data-i18n="c3">单仓库双语。</b> <span data-i18n="c3d">一个项目，SKILL.md 英文可加载版 + SKILL.zh-CN.md 中文对照版。</span></li>
+    </ul>
+  </div>
+</section>
+
+<section id="references">
+  <div class="wrap">
+    <p class="kicker" data-i18n="k6">REFERENCES</p>
+    <h2 data-i18n="h6">背景参考</h2>
+    <p style="font-size:14px;color:var(--ink-dim);margin-bottom:14px" data-i18n="refLead">与以下资料做最佳实践对齐；本实现为原创，无代码复用。</p>
+    <div class="refs">
+      <a class="ref" href="https://owasp.org/www-project-ai-security-and-governance-guide/" target="_blank" rel="noopener">OWASP AI Security Guide</a>
+      <a class="ref" href="https://owasp.org/www-project-top-10-for-large-language-model-applications/" target="_blank" rel="noopener">OWASP Top 10 for LLM</a>
+      <a class="ref" href="https://www.nist.gov/itl/ai-risk-management-framework" target="_blank" rel="noopener">NIST AI RMF</a>
+      <a class="ref" href="https://atlas.mitre.org/" target="_blank" rel="noopener">MITRE ATLAS</a>
+      <a class="ref" href="https://support.apple.com/guide/security/welcome/web" target="_blank" rel="noopener">Apple Platform Security</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap" style="display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between;width:100%">
+    <span class="mono">MIT License © 2026</span>
+    <span data-i18n="foot">信息安全开源持续贡献 · 迭代一</span>
+  </div>
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+  "use strict";
+  var I18N = {
+    zh: {
+      badge1:"READ-ONLY AUDIT", badge2:"AI AGENT SECURITY", badge3:"ZERO DEPENDENCY",
+      tagline:"AI Agent 权限边界探测（只读审计）",
+      lead:"探测 AI Agent 在当前电脑上实际拥有的权限，输出带证据的权限矩阵与加固建议。信息安全开源持续贡献项目的一个迭代，聚焦 AI Agent 安全方向。",
+      ringSurfaces:"8 权限面", ringSub:"8 PERMISSION SURFACES",
+      s1:"身份", s2:"文件", s3:"Shell", s4:"网络", s5:"凭据", s6:"系统", s7:"GUI", s8:"基线",
+      ringCaption:"8 SURFACES · 68 CHECKS · READ-ONLY",
+      riskTitle:"风险分级标准",
+      riskHigh:"可写系统目录 · 免密 sudo · PATH 注入",
+      riskMedium:"敏感目录可达 · 凭据存在 · 监听端口",
+      riskLow:"sticky 临时目录 · 干净的 PATH",
+      riskInfo:"身份与版本等上下文信息",
+      k1:"FEATURES", h1:"功能特性",
+      f1t:"只读探测", f1d:"不修改系统状态、不提权、不发送网络载荷，写入仅限报告目录与一枚即建即删的临时文件。",
+      f2t:"8 大权限面", f2d:"身份与提权、文件系统、shell 与工具、网络、凭据、系统信息、GUI/浏览器、安全基线。",
+      f3t:"三格式报告", f3d:"JSON 结构化（程序消费）+ Markdown 权限矩阵（人读）+ HTML 可视化报告（中英切换、可筛选搜索）。",
+      f4t:"真实可写性验证", f4d:"临时文件实测而非仅看权限位，规避 TCC / ACL 下的误判。",
+      f5t:"风险分级与加固建议", f5d:"每条发现带 high / medium / low / info 评级与对应处置建议。",
+      f6t:"零第三方依赖", f6d:"仅用 Python 标准库，Python 3.9+ 即可运行。",
+      k2:"PERMISSION SURFACES", h2:"探测维度（8 大权限面，共 68 项检查）",
+      tSurf:"权限面", tScope:"检查内容", tNote:"说明",
+      d1:"当前用户、uid/gid、所属组、HOME/shell、sudo 状态、umask", n1:"sudo 仅以 -n -l 查询，绝不弹窗",
+      d2:"用户/系统/敏感/项目目录的读-写-执行权限，其他用户家目录，真实可写性验证", n2:"识别 sticky 位（如 /tmp）避免误报",
+      d3:"shell 执行能力、可用工具清单、PATH 卫生、homebrew", n3:"PATH 用户可写/当前目录为高危",
+      d4:"代理环境变量、DNS、出站 TCP、本地监听端口、默认路由", n4:"仅为 TCP 连接尝试，不发送载荷",
+      d5:"敏感环境变量存在性、凭据文件存在性", n5:"只报存在与否，绝不读取内容",
+      d6:"平台、macOS 版本、CPU/内存、运行时长、磁盘、已装应用、进程可见性", n6:"用于评估资源与影响面",
+      d7:"剪贴板可读性、浏览器配置文件存在性（Chrome/Safari/Firefox）", n7:"浏览器配置可能含会话/凭据",
+      d8:"SIP、Gatekeeper、FileVault 状态", n8:"关闭状态会显著扩大影响面",
+      k3:"QUICK START", h3:"快速开始",
+      q1t:"进入项目", q1d:"clone 或进入项目目录",
+      q2t:"直接运行", q2d:"无需安装任何依赖",
+      q3t:"查看报告", q3d:"打开权限矩阵报告",
+      copy:"复制",
+      qsNote:"常用参数：--output-dir 指定输出目录 · --json/--md/--html 选择格式 · --no-network 跳过网络检查（隔离网络使用）。",
+      k4:"OUTPUT", h4:"输出说明",
+      o1:"环境与时间戳", o2:"风险计数", o3:"68 项检查，含状态/证据/风险/建议", o4:"加固建议清单",
+      o5:"风险摘要表", o6:"权限矩阵表（68 行）", o7:"高/中风险发现与证据", o8:"加固建议", o9:"8 条可选修复项",
+      outNote:"每次运行产出一份全新报告（含 UTC 时间戳），可按日期归档，便于整改前后对比与审计留痕。报告含本机主机名等本地信息，请勿提交公开仓库。",
+      k5:"COMPLIANCE", h5:"合规与定位",
+      c1:"防御性安全。", c1d:"仅做审计、检测、评估方向，无任何攻击、爆破、漏洞利用内容。",
+      c2:"只读审计。", c2d:"不读秘密内容、不提权、不修改系统；输出仅用于权限评估与加固。",
+      c3:"单仓库双语。", c3d:"一个项目，SKILL.md 英文可加载版 + SKILL.zh-CN.md 中文对照版。",
+      k6:"REFERENCES", h6:"背景参考",
+      refLead:"与以下资料做最佳实践对齐；本实现为原创，无代码复用。",
+      foot:"信息安全开源持续贡献 · 迭代一"
+    },
+    en: {
+      badge1:"READ-ONLY AUDIT", badge2:"AI AGENT SECURITY", badge3:"ZERO DEPENDENCY",
+      tagline:"AI Agent Permission Boundary Probe (read-only audit)",
+      lead:"Probes what an AI agent can actually access on this machine and produces an evidence-backed permission matrix with hardening recommendations. An iteration of an information-security open-source contribution program focused on AI agent security.",
+      ringSurfaces:"8 SURFACES", ringSub:"PERMISSION SURFACES",
+      s1:"Identity", s2:"Files", s3:"Shell", s4:"Network", s5:"Creds", s6:"System", s7:"GUI", s8:"Posture",
+      ringCaption:"8 SURFACES · 68 CHECKS · READ-ONLY",
+      riskTitle:"Risk rating rubric",
+      riskHigh:"writable system dirs · passwordless sudo · PATH injection",
+      riskMedium:"sensitive dirs · credential presence · listening ports",
+      riskLow:"sticky tmp dirs · clean PATH",
+      riskInfo:"identity & version context",
+      k1:"FEATURES", h1:"Features",
+      f1t:"Read-only by design", f1d:"Never modifies system state, never escalates privileges, sends no network payloads. Writes are limited to the report directory and one disposable tempfile.",
+      f2t:"8 permission surfaces", f2d:"Identity & privilege, filesystem, shell & tools, network, credentials, system info, GUI/browser, security posture.",
+      f3t:"Three-format reports", f3d:"Structured JSON for machines + a Markdown permission matrix + a self-contained visual HTML report (EN/中文 switchable, filter, search).",
+      f4t:"Truthful writability checks", f4d:"A tempfile test instead of permission bits alone, avoiding TCC / ACL false positives.",
+      f5t:"Risk ratings & hardening advice", f5d:"Every finding carries a high / medium / low / info rating with a matching recommendation.",
+      f6t:"Zero third-party dependencies", f6d:"Python standard library only — runs on Python 3.9+.",
+      k2:"PERMISSION SURFACES", h2:"Probe dimensions (8 surfaces, 68 checks)",
+      tSurf:"Surface", tScope:"What is checked", tNotes:"Notes",
+      d1:"user, uid/gid, groups, HOME/shell, sudo state, umask", n1:"sudo queried with -n -l only — never prompts",
+      d2:"R/W/X on user/system/sensitive/project dirs, other users' homes, verified write tests", n2:"sticky-bit aware (e.g. /tmp)",
+      d3:"shell execution, tool availability, PATH hygiene, homebrew", n3:"user-writable / current-dir PATH entries are high risk",
+      d4:"proxy env vars, DNS, outbound TCP, local listeners, default route", n4:"TCP connect attempts only — no payloads",
+      d5:"sensitive env var presence, credential file presence", n5:"existence and names only — never contents",
+      d6:"platform, macOS version, CPU/memory, uptime, disk, apps, process visibility", n6:"for impact assessment",
+      d7:"clipboard readability, browser profile presence (Chrome/Safari/Firefox)", n7:"profiles may hold sessions/credentials",
+      d8:"SIP, Gatekeeper, FileVault state", n8:"disabled state widens the blast radius",
+      k3:"QUICK START", h3:"Quick start",
+      q1t:"Enter the project", q1d:"clone or cd into the project",
+      q2t:"Run directly", q2d:"no dependencies to install",
+      q3t:"Read the report", q3d:"open the permission matrix report",
+      copy:"Copy",
+      qsNote:"Options: --output-dir sets the report dir · --json/--md/--html selects formats · --no-network skips network checks (air-gapped).",
+      k4:"OUTPUT", h4:"Output",
+      o1:"environment & timestamp", o2:"risk counts", o3:"68 checks with status / evidence / risk / recommendation", o4:"hardening checklist",
+      o5:"risk summary table", o6:"permission matrix (68 rows)", o7:"high/medium findings with evidence", o8:"hardening recommendations", o9:"8 optional fix items",
+      outNote:"Each run produces a fresh UTC-timestamped report — archive by date for before/after hardening comparison and audit trails. Reports contain local hostname info; do not commit them to a public repo.",
+      k5:"COMPLIANCE", h5:"Compliance & positioning",
+      c1:"Defensive security.", c1d:"Audit, detection and assessment only — no attack, exploitation or brute-force content.",
+      c2:"Read-only audit.", c2d:"Never reads secret contents, never escalates, never modifies; output is used solely for assessment and hardening.",
+      c3:"One repo, two languages.", c3d:"A single project: loadable SKILL.md (EN) plus SKILL.zh-CN.md (CN) as the reference version.",
+      k6:"REFERENCES", h6:"Background references",
+      refLead:"Aligned for best practice; this implementation is original and shares no code with them.",
+      foot:"InfoSec open-source contribution · Iteration 01"
+    }
+  };
+
+  function setLang(lang){
+    var dict = I18N[lang];
+    if(!dict) return;
+    var nodes = document.querySelectorAll("[data-i18n]");
+    for(var i=0;i<nodes.length;i++){
+      var key = nodes[i].getAttribute("data-i18n");
+      if(dict[key] !== undefined) nodes[i].textContent = dict[key];
+    }
+    document.documentElement.lang = (lang === "zh") ? "zh-CN" : "en";
+    document.getElementById("btn-zh").classList.toggle("active", lang === "zh");
+    document.getElementById("btn-en").classList.toggle("active", lang === "en");
+    try{ localStorage.setItem("probe-lang", lang); }catch(e){}
+  }
+
+  var saved = null;
+  try{ saved = localStorage.getItem("probe-lang"); }catch(e){}
+  var initial = (saved === "en" || saved === "zh") ? saved : "zh";
+  setLang(initial);
+
+  document.getElementById("btn-zh").addEventListener("click", function(){ setLang("zh"); });
+  document.getElementById("btn-en").addEventListener("click", function(){ setLang("en"); });
+
+  var toastTimer = null;
+  function toast(msg){
+    var t = document.getElementById("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    if(toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.classList.remove("show"); }, 1600);
+  }
+
+  var buttons = document.querySelectorAll(".copy-btn");
+  for(var i=0;i<buttons.length;i++){
+    buttons[i].addEventListener("click", function(){
+      var text = this.getAttribute("data-copy");
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(text).then(function(){
+          toast((document.documentElement.lang === "en") ? "Copied" : "已复制");
+        }, function(){ toast((document.documentElement.lang === "en") ? "Copy failed" : "复制失败"); });
+      } else {
+        toast((document.documentElement.lang === "en") ? "Copy failed" : "复制失败");
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

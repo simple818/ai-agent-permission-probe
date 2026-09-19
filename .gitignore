@@ -1,0 +1,12 @@
+# Reports contain local host/user info — never commit them
+probe-report/
+
+# Local self-check screenshots (not deliverables)
+_shots/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
